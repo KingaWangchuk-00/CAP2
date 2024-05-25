@@ -12,146 +12,175 @@
 
 import os
 import random
-import string
+import hashlib
 
 class Account:
     def __init__(self, account_number, password, account_type, balance=0):
         self.account_number = account_number
-        self.password = password
+        self.password = self.hash_password(password)
         self.account_type = account_type
         self.balance = balance
+
+    def hash_password(self, password):
+        return hashlib.sha256(password.encode()).hexdigest()
+
+    def check_password(self, password):
+        return self.hash_password(password) == self.password
 
     def deposit(self, amount):
         if amount > 0:
             self.balance += amount
-            print(f"Deposited: Nu{amount}. New Balance: Nu{self.balance}")
-        else:
-            print("Invalid amount. Please enter a valid amount to deposit.")
+            return True
+        return False
+    
 
     def withdraw(self, amount):
-        if amount > 0 and amount <= self.balance:
+        if 0 < amount <= self.balance:
             self.balance -= amount
-            print(f"Withdrawn: Nu{amount}. New Balance: Nu{self.balance}")
-        else:
-            print("Insufficient funds or invalid amount.")
+            return True
+        return False
 
-    def save_to_file(self, file_name='accounts.txt'):
-        with open(file_name, 'a') as file:
-            file.write(f"{self.account_number},{self.password},{self.account_type},{self.balance}\n")
+    def to_string(self):
+        return f"{self.account_number},{self.password},{self.account_type},{self.balance}\n"
 
-class PersonalAccount(Account):
-    def __init__(self, account_number, password, balance=0):
-        super().__init__(account_number, password, 'personal', balance)
+    @staticmethod
+    def from_string(data):
+        account_number, password, account_type, balance = data.split(',')
+        return Account(account_number, password, account_type, float(balance))
 
 class BusinessAccount(Account):
     def __init__(self, account_number, password, balance=0):
-        super().__init__(account_number, password, 'business', balance)
+        super().__init__(account_number, password, 'Business', balance)
 
-def generate_account_number():
-    return ''.join(random.choices(string.digits, k=5))
+class PersonalAccount(Account):
+    def __init__(self, account_number, password, balance=0):
+        super().__init__(account_number, password, 'Personal', balance)
 
-def generate_password():
-    return ''.join(random.choices(string.ascii_letters + string.digits, k=4))
+class Bank:
+    def __init__(self, filename="accounts.txt"):
+        self.accounts = {}
+        self.filename = filename
+        self.load_accounts()
 
-def load_accounts(file_name='accounts.txt'):
-    accounts = {}
-    if os.path.exists(file_name):
-        with open(file_name, 'r') as file:
-            for line in file:
-                account_number, password, account_type, balance = line.strip().split(',')
-                balance = float(balance)
-                if account_type == 'personal':
-                    account = PersonalAccount(account_number, password, balance)
-                elif account_type == 'business':
-                    account = BusinessAccount(account_number, password, balance)
-                accounts[account_number] = account
-    return accounts
+    def load_accounts(self):
+        if os.path.exists(self.filename):
+            with open(self.filename, 'r') as file:
+                for line in file:
+                    account = Account.from_string(line.strip())
+                    self.accounts[account.account_number] = account
 
-def login(accounts):
-    account_number = input("Enter your account number: ")
-    password = input("Enter your password: ")
-    if account_number in accounts and accounts[account_number].password == password:
-        print("Login successful!")
-        return accounts[account_number]
-    else:
-        print("Invalid account number or password.")
+    def save_accounts(self):
+        with open(self.filename, 'w') as file:
+            for account in self.accounts.values():
+                file.write(account.to_string())
+
+    def create_account(self, account_type):
+        account_number = str(random.randint(100000, 999999))
+        password = str(random.randint(1000, 9999))
+        if account_type == "Business":
+            account = BusinessAccount(account_number, password)
+        elif account_type == "Personal":
+            account = PersonalAccount(account_number, password)
+        else:
+            return None
+
+        self.accounts[account.account_number] = account
+        self.save_accounts()
+        return account_number, password
+
+    def authenticate(self, account_number, password):
+        account = self.accounts.get(account_number)
+        if account and account.check_password(password):
+            return account
         return None
 
-def transfer_funds(accounts, from_account):
-    to_account_number = input("Enter the recipient's account number: ")
-    amount = float(input("Enter the amount to transfer: "))
-    if to_account_number in accounts:
-        if from_account.balance >= amount:
-            from_account.withdraw(amount)
-            accounts[to_account_number].deposit(amount)
-            print(f"Transferred Nu{amount} to account {to_account_number}.")
-        else:
-            print("Insufficient funds.")
-    else:
-        print("Recipient account not found.")
+    def delete_account(self, account_number):
+        if account_number in self.accounts:
+            del self.accounts[account_number]
+            self.save_accounts()
+            return True
+        return False
+
+    def transfer_money(self, from_account, to_account_number, amount):
+        if to_account_number not in self.accounts:
+            return False, "Receiving account does not exist."
+        if from_account.balance < amount:
+            return False, "Insufficient funds."
+        to_account = self.accounts[to_account_number]
+        from_account.withdraw(amount)
+        to_account.deposit(amount)
+        self.save_accounts()
+        return True, "Transfer successful."
 
 def main():
-    accounts = load_accounts()
+    bank = Bank()
+    print("Welcome to the Bank Application")
 
     while True:
-        print("1. Open an Account")
-        print("2. Login to Account")
-        print("3. Exit")
+        print("\n1. Open Account")
+        print("\n2. Login")
+        print("\n3. Exit")
         choice = input("Enter your choice: ")
 
-        if choice == '1':
-            print("Select Account Type:")
-            print("1. Personal Account")
-            print("2. Business Account")
-            account_type_choice = input("Enter your choice: ")
-            if account_type_choice in ['1', '2']:
-                account_number = generate_account_number()
-                password = generate_password()
-                if account_type_choice == '1':
-                    account = PersonalAccount(account_number, password)
-                else:
-                    account = BusinessAccount(account_number, password)
-                account.save_to_file()
-                accounts[account_number] = account
-                print(f"Account created successfully! Account Number: {account_number}, Password: {password}")
+        if choice == "1":
+            account_type = input("Enter account type (Business/Personal): ")
+            account_number, password = bank.create_account(account_type)
+            if account_number:
+                print(f"Account created successfully! Your account number is {account_number} and your password is {password}")
             else:
-                print("Invalid account type selected.")
-
-        elif choice == '2':
-            account = login(accounts)
+                print("Invalid account type.")
+        
+        elif choice == "2":
+            account_number = input("Enter account number: ")
+            password = input("Enter password: ")
+            account = bank.authenticate(account_number, password)
             if account:
+                print(f"Login successful! Welcome, {account.account_type} account holder.")
                 while True:
-                    print("\n..Account Menu...")
-                    print("1. Check Balance")
-                    print("2. Deposit")
-                    print("3. Withdraw")
-                    print("4. Transfer Funds")
-                    print("5. Delete Account")
-                    print("6. Logout")
-                    account_choice = input("Enter your choice: ")
-
-                    if account_choice == '1':
-                        print(f"Your Balance: Nu{account.balance}")
-                    elif account_choice == '2':
+                    print("\n1. Check Balance")
+                    print("\n2. Deposit Money")
+                    print("\n3. Withdraw Money")
+                    print("\n4. Transfer Money")
+                    print("\n5. Delete Account")
+                    print("\n6. Logout")
+                    sub_choice = input("Enter your choice: ")
+                    if sub_choice == "1":
+                        print(f"Your balance is: {account.balance}")
+                    elif sub_choice == "2":
                         amount = float(input("Enter amount to deposit: "))
-                        account.deposit(amount)
-                    elif account_choice == '3':
+                        if account.deposit(amount):
+                            bank.save_accounts()
+                            print(f"Deposited successfully. New balance: {account.balance}")
+                        else:
+                            print("Invalid amount.")
+                    elif sub_choice == "3":
                         amount = float(input("Enter amount to withdraw: "))
-                        account.withdraw(amount)
-                    elif account_choice == '4':
-                        transfer_funds(accounts, account)
-                    elif account_choice == '5':
-                        del accounts[account.account_number]
-                        print("Account deleted successfully.")
-                        break
-                    elif account_choice == '6':
+                        if account.withdraw(amount):
+                            bank.save_accounts()
+                            print(f"Withdrawn successfully. New balance: {account.balance}")
+                        else:
+                            print("Invalid amount or insufficient balance.")
+                    elif sub_choice == "4":
+                        to_account_number = input("Enter the account number to transfer to: ")
+                        amount = float(input("Enter the amount to transfer: "))
+                        _, message = bank.transfer_money(account, to_account_number, amount)
+                        print(message)
+                    elif sub_choice == "5":
+                        if bank.delete_account(account.account_number):
+                            print("Account deleted successfully.")
+                            break
+                        else:
+                            print("Error in deleting account.")
+                    elif sub_choice == "6":
                         print("Logged out successfully.")
                         break
                     else:
                         print("Invalid choice. Please try again.")
-
-        elif choice == '3':
-            print("Thank you! Visit us again.")
+            else:
+                print("Authentication failed. Please check your account number and password.")
+        
+        elif choice == "3":
+            print("Thank you for using the Bank Application. Goodbye!")
             break
 
         else:
