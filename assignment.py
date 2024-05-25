@@ -1,12 +1,25 @@
+
+# Your Name:kinga wangchuk
+# Your Section:ME
+# Your Student ID Number:02230265
+################################
+# REFERENCES
+#https://youtu.be/i6xMBig-pP4?list=PLzMcBGfZo4-lp3jAExUCewBfMx3UZFkh5
+#https://youtu.be/2-DNswzCkqk?list=PLzMcBGfZo4-lp3jAExUCewBfMx3UZFkh5
+#https://youtu.be/UdsNBIzsmlI?list=PLzMcBGfZo4-lp3jAExUCewBfMx3UZFkh5
+#####################################
+
+
+
 import os
 import random
 import hashlib
 
 # Base class for UserAccount
 class UserAccount:
-    def __init__(self, id_number, secret, type_of_account, funds=0):
+    def __init__(self, id_number, secret, type_of_account, funds=0, is_encrypted=False):
         self.id_number = id_number
-        self.secret = self.encrypt_secret(secret)  # Encrypt secret on initialization
+        self.secret = secret if is_encrypted else self.encrypt_secret(secret)  # Encrypt secret only if not already encrypted
         self.type_of_account = type_of_account
         self.funds = funds
 
@@ -40,7 +53,7 @@ class UserAccount:
     @staticmethod
     def parse(data):
         id_number, secret, type_of_account, funds = data.split(',')
-        return UserAccount(id_number, secret, type_of_account, float(funds))
+        return UserAccount(id_number, secret, type_of_account, float(funds), is_encrypted=True)
 
 # Derived class for CorporateAccount
 class CorporateAccount(UserAccount):
@@ -86,7 +99,7 @@ class FinancialInstitution:
 
         self.user_accounts[user_account.id_number] = user_account
         self.record_accounts()
-        return id_number, secret
+        return id_number, secret  # Return the plaintext secret
 
     # Method to validate user credentials
     def validate_user(self, id_number, secret):
@@ -110,10 +123,11 @@ class FinancialInstitution:
         if source_account.funds < cash:
             return False, "Not enough funds."
         destination_account = self.user_accounts[destination_id_number]
-        source_account.remove_funds(cash)
-        destination_account.add_funds(cash)
-        self.record_accounts()
-        return True, "Transfer completed."
+        if source_account.remove_funds(cash):
+            destination_account.add_funds(cash)
+            self.record_accounts()
+            return True, "Transfer completed."
+        return False, "Transfer failed."
 
 # Main function to run the financial application
 def run():
@@ -134,8 +148,9 @@ def run():
 
         if user_choice == "1":
             type_of_account = input("Choose account type (Corporate/Individual): ")
-            id_number, secret = institution.register_account(type_of_account)
-            if id_number:
+            account_details = institution.register_account(type_of_account)
+            if account_details:
+                id_number, secret = account_details
                 print(f"Account successfully created! Your ID is {id_number} and your secret is {secret}")
             else:
                 print("Invalid account type.")
